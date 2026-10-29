@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Squeek Watch</title>
+<meta name="description" content="Live dashboard for Squeekchain, the blockchain mined by a real hamster wheel.">
+<style>
+:root{--bg:#0e0f13;--card:#16181e;--line:#262a33;--text:#e9e6dc;--mute:#8b8f99;--acc:#f5c542;--ok:#4ad295;--bad:#ef6a5a;--link:#7aa7ff}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#f6f4ee;--card:#fff;--line:#e3e0d6;--text:#1c1d21;--mute:#6b6e76;--acc:#b98a00;--ok:#14935a;--bad:#c63b2b;--link:#2456c9}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+header,main,footer{max-width:1080px;margin:0 auto;padding:20px 16px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between}
+h1{margin:0;font-size:22px;letter-spacing:.02em}h1 b{color:var(--acc)}
+h2{margin:0 0 12px;font-size:13px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+.pill{display:inline-flex;gap:6px;align-items:center;font-size:12px;color:var(--mute)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--mute)}.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.big{font-size:30px;font-weight:700}.sub{color:var(--mute);font-size:12px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px}.kv dt{color:var(--mute)}.kv dd{margin:0;text-align:right;overflow-wrap:anywhere}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:8px 0 4px}.bar i{display:block;height:100%;background:var(--acc)}
+.wheel{width:64px;height:64px;border:4px dashed var(--acc);border-radius:50%;float:right;animation:spin 0s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--mute);font-weight:500}
+td.r{text-align:right;white-space:nowrap}.wrap{overflow-x:auto}
+.err{color:var(--bad);font-size:13px;min-height:1em}
+footer{color:var(--mute);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1><b>Squeek</b> Watch</h1>
+  <span class="pill"><span id="feedDot" class="dot"></span><span id="feed">connecting…</span></span>
+</header>
+<main>
+  <div class="grid">
+    <section class="card">
+      <div id="wheel" class="wheel" aria-hidden="true"></div>
+      <h2>The wheel</h2>
+      <div class="big" id="rpm">–</div><div class="sub">revolutions per minute</div>
+      <dl class="kv" style="margin-top:12px">
+        <dt>Status</dt><dd id="core">–</dd>
+        <dt>Speed</dt><dd id="speed">–</dd>
+        <dt>Distance run</dt><dd id="dist">–</dd>
+        <dt>Work units</dt><dd id="work">–</dd>
+        <dt>Sensor</dt><dd id="sensor">–</dd>
+        <dt>Last reading</dt><dd id="seen">–</dd>
+      </dl>
+    </section>
+    <section class="card">
+      <h2>Blocks</h2>
+      <div class="big" id="height">–</div><div class="sub">block height</div>
+      <div class="bar"><i id="progBar" style="width:0"></i></div>
+      <div class="sub" id="prog">progress to next block</div>
+      <dl class="kv" style="margin-top:12px">
+        <dt>Work / 1000 blocks</dt><dd id="wpk">–</dd>
+        <dt>Settled through round</dt><dd id="settled">–</dd>
+        <dt>Settlement queue</dt><dd id="queue">–</dd>
+        <dt>Last settlement tx</dt><dd id="lastTx">–</dd>
+      </dl>
+    </section>
+    <section class="card">
+      <h2>SQK supply</h2>
+      <div class="big" id="supply">–</div><div class="sub">SQK minted by the hamster</div>
+      <div class="bar"><i id="capBar" style="width:0"></i></div>
+      <div class="sub" id="capPct">of the cap</div>
+      <dl class="kv" style="margin-top:12px">
+        <dt>Cap</dt><dd id="cap">–</dd>
+        <dt>Current round</dt><dd id="round">–</dd>
+        <dt>Halving every</dt><dd id="halving">–</dd>
+        <dt>Total staked</dt><dd id="staked">–</dd>
+        <dt>NFTs live</dt><dd id="nfts">–</dd>
+      </dl>
+    </section>
+  </div>
+
+  <section class="card" style="margin-top:14px">
+    <h2>Latest on-chain activity</h2>
+    <div class="wrap"><table>
+      <thead><tr><th>When</th><th>Event</th><th>Details</th><th class="r">Tx</th></tr></thead>
+      <tbody id="events"><tr><td colspan="4" class="sub">reading…</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <section class="card" style="margin-top:14px">
+    <h2>Contracts (Sepolia)</h2>
+    <dl class="kv" id="contracts"></dl>
+  </section>
+  <p class="err" id="err"></p>
+</main>
+<footer>
+  Data: the public Squeekchain API (<a href="https://api.squeekchain.com/v1/status">/v1/status</a>,
+  <a href="https://api.squeekchain.com/v1/economy/state">/v1/economy/state</a>,
+  <a href="https://api.squeekchain.com/v1/events">/v1/events</a>), refreshed every 15 s.
+  Not affiliated with Squeekchain. <a href="https://squeekchain.com/genesis">squeekchain.com</a>
+</footer>
+<script>
+const API = 'https://api.squeekchain.com';
+const SCAN = 'https://sepolia.etherscan.io';
+const REFRESH_MS = 15000;
+const $ = (id) => document.getElementById(id);
+const cache = {};
+
+// Their API sends ETag and Retry-After: reuse the last body on 304, back off when asked.
+let backoffUntil = 0;
+async function get(path) {
+  const prev = cache[path];
+  const r = await fetch(API + path, { headers: prev ? { 'If-None-Match': prev.etag } : {} });
+  if (r.status === 304 && prev) return prev.body;
+  if (r.status === 429 || r.status >= 500) {
+    const wait = Number(r.headers.get('Retry-After')) || 30;
+    backoffUntil = Date.now() + wait * 1000;
+    throw new Error(`${path}: ${r.status}, retrying in ${wait}s`);
+  }
+  if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
+  const body = await r.json();
+  cache[path] = { etag: r.headers.get('ETag'), body };
+  return body;
+}
+
+const num = (v) => Number(v).toLocaleString('en-US');
+function units(base, decimals = 18, digits = 0) {
+  const b = BigInt(base), d = 10n ** BigInt(decimals);
+  const whole = b / d, frac = (b % d).toString().padStart(decimals, '0').slice(0, digits);
+  return whole.toLocaleString('en-US') + (digits ? '.' + frac : '');
+}
+function ago(iso) {
+  if (!iso) return '–';
+  const s = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+const short = (h) => h ? h.slice(0, 8) + '…' + h.slice(-6) : '–';
+const txLink = (h) => h ? `<a href="${SCAN}/tx/${h}" target="_blank" rel="noopener">${short(h)}</a>` : '–';
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function renderStatus(s) {
+  const m = s.measurement || {};
+  const online = m.freshness === 'online';
+  $('feedDot').className = 'dot ' + (online ? 'ok' : 'bad');
+  $('feed').textContent = online ? 'wheel sensor online' : 'wheel sensor ' + (m.freshness || 'unknown');
+  const rpm = (m.rpmMilli || 0) / 1000;
+  $('rpm').textContent = rpm.toFixed(1);
+  $('wheel').style.animationDuration = rpm > 0 ? (60 / rpm) + 's' : '0s';
+  $('core').textContent = m.coreStatus || '–';
+  $('speed').textContent = ((m.speedMmPerSecond || 0) / 1000).toFixed(2) + ' m/s';
+  $('dist').textContent = ((m.distanceMm || 0) / 1e6).toFixed(2) + ' km';
+  $('work').textContent = m.cumulativeWorkUnits ? num(m.cumulativeWorkUnits) : '–';
+  const mod = (s.modules || [])[0];
+  $('sensor').textContent = mod ? `${mod.moduleType} v${mod.moduleVersion} (${m.provenance || '?'})` : '–';
+  $('seen').textContent = ago(m.observedAt);
+
+  const b = (s.builder && (s.builder.projected || s.builder.anchor)) || {};
+  $('height').textContent = b.blockHeight ? num(b.blockHeight) : '–';
+  // blockProgress is a fraction of one block in billionths (cumulativeBlockUnits = height * 1e9 + progress).
+  const pct = b.blockProgress ? Number(b.blockProgress) / 1e7 : 0;
+  $('progBar').style.width = Math.min(100, pct) + '%';
+  $('prog').textContent = pct.toFixed(1) + '% of the next block';
+  $('wpk').textContent = b.workPerThousandBlocks ? num(b.workPerThousandBlocks) : '–';
+  const a = (s.builder && s.builder.anchor) || {};
+  $('settled').textContent = a.settledThroughRound ? '#' + a.settledThroughRound : '–';
+  const q = s.settlementQueue || {};
+  $('queue').textContent = q.state ? q.state + (q.incidentOpen ? ' (incident)' : '') : '–';
+  $('lastTx').innerHTML = txLink(a.transactionHash);
+}
+
+function renderEconomy(e) {
+  const sup = e.supply || {}, dec = (e.asset || {}).decimals || 18;
+  $('supply').textContent = units(sup.liveSupplyBaseUnits || '0', dec);
+  $('cap').textContent = units(sup.capBaseUnits || '0', dec) + ' SQK';
+  const cap = BigInt(sup.capBaseUnits || '1'), live = BigInt(sup.liveSupplyBaseUnits || '0');
+  const pct = Number(live * 1000000n / cap) / 10000;
+  $('capBar').style.width = pct + '%';
+  $('capPct').textContent = pct.toFixed(3) + '% of the cap';
+  $('round').textContent = (e.lifecycle || {}).currentRound ? '#' + e.lifecycle.currentRound + ((e.lifecycle.paused) ? ' (paused)' : '') : '–';
+  $('halving').textContent = (e.schedule || {}).halvingBlocks ? num(e.schedule.halvingBlocks) + ' blocks' : '–';
+  $('staked').textContent = units((e.staking || {}).totalStakedBaseUnits || '0', dec) + ' SQK';
+  $('nfts').textContent = (e.nft || {}).live ? num(e.nft.live) : '–';
+
+  const ids = e.identities || {};
+  const rows = [['Core', ids.core], ['SQK token', ids.token], ['Genesis', ids.genesis], ['Launch', ids.launch],
+    ['Mining', (ids.mining || {}).proxy], ['Staking', (ids.staking || {}).proxy], ['Token factory', ids.tokenFactory]];
+  $('contracts').innerHTML = rows.filter(([, a]) => a).map(([n, a]) =>
+    `<dt>${n}</dt><dd><a href="${SCAN}/address/${a}" target="_blank" rel="noopener">${a}</a></dd>`).join('');
+}
+
+function describe(ev) {
+  const p = ev.payload || {};
+  if (p.amountBaseUnits && p.asset) return units(p.amountBaseUnits, p.asset.decimals, 2) + ' ' + p.asset.symbol +
+    (p.completedBlockCount ? ` for ${p.completedBlockCount} blocks` : '');
+  const keys = Object.keys(p).filter((k) => typeof p[k] !== 'object').slice(0, 3);
+  return keys.map((k) => `${k}: ${p[k]}`).join(', ') || '';
+}
+function renderEvents(list) {
+  const evs = (list.events || []).slice(0, 12);
+  $('events').innerHTML = evs.length ? evs.map((ev) => `<tr>
+    <td>${ago(ev.occurredAt)}</td>
+    <td>${esc((ev.type || '').replace(/^[a-z]+\./, '').replace(/_/g, ' '))}</td>
+    <td>${esc(describe(ev))}</td>
+    <td class="r">${txLink((ev.source || {}).transactionHash)}</td></tr>`).join('')
+    : '<tr><td colspan="4" class="sub">no events yet</td></tr>';
+}
+
+async function tick() {
+  if (Date.now() < backoffUntil) return;
+  const errs = [];
+  await Promise.all([
+    get('/v1/status').then(renderStatus).catch((e) => errs.push(e.message)),
+    get('/v1/economy/state').then(renderEconomy).catch((e) => errs.push(e.message)),
+    get('/v1/events?limit=12').then(renderEvents).catch((e) => errs.push(e.message)),
+  ]);
+  $('err').textContent = errs.join(' · ');
+}
+tick();
+setInterval(tick, REFRESH_MS);
+</script>
+</body>
+</html>
